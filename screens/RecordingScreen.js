@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, Button, Alert, FlatList, StyleSheet } from "react-native";
 import { Audio } from "expo-av";
-import * as Permissions from "expo-permissions";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { TextInput } from "react-native";
 
@@ -18,9 +17,7 @@ const RecordingScreen = () => {
 
   useEffect(() => {
     const requestPermission = async () => {
-      const { status } = await Permissions.askAsync(
-        Permissions.AUDIO_RECORDING
-      );
+      const { status } = await Audio.requestPermissionsAsync();
       setHasPermission(status === "granted");
       if (status !== "granted") {
         Alert.alert(
@@ -75,8 +72,6 @@ const RecordingScreen = () => {
       setIsRecording(false);
       const uri = recording.getURI();
       console.log("Recording stopped. URI:", uri);
-      saveRecording(uri);
-      playRecording(uri);
     } catch (err) {
       console.error("Failed to stop recording", err);
     }
@@ -123,7 +118,6 @@ const RecordingScreen = () => {
     <View style={styles.container}>
       <Text>Recording Screen</Text>
       <Text>Status: {isRecording ? "Recording..." : "Idle"}</Text>
-
       {isRecording ? (
         <Button title="Stop Recording" onPress={stopRecording} />
       ) : (
@@ -141,25 +135,24 @@ const RecordingScreen = () => {
           </View>
         )}
       />
-              <TextInput
-            style={styles.searchBar}
-            placeholder="Search recordings..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-        />
-        <FlatList
-            data={filteredRecordings}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-                <View style={styles.recordingItem}>
-                    <Text>{`Recording - ${item.date.toLocaleString()}`}</Text>
-                    <Button title="Play" onPress={() => playRecording(item.uri)} />
-                    <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
-                </View>
-            )}
-        />
+      <TextInput
+        style={styles.searchBar}
+        placeholder="Search recordings..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+      <FlatList
+        data={filteredRecordings}
+        keyExtractor={(item, index) => index.toString()}
+        renderItem={({ item }) => (
+          <View style={styles.recordingItem}>
+            <Text>{`Recording - ${item.date.toLocaleString()}`}</Text>
+            <Button title="Play" onPress={() => playRecording(item.uri)} />
+            <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
+          </View>
+        )}
+      />
     </View>
-    
   );
 };
 
