@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Button, Alert, FlatList, StyleSheet } from "react-native";
+import { View, Text, Button, Alert, FlatList, StyleSheet, TextInput } from "react-native";
 import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TextInput } from "react-native";
 
 const RecordingScreen = () => {
   const [hasPermission, setHasPermission] = useState(null);
@@ -11,8 +10,9 @@ const RecordingScreen = () => {
   const [sound, setSound] = useState();
   const [recordingsList, setRecordingsList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+
   const filteredRecordings = recordingsList.filter((item) =>
-    item.uri.includes(searchQuery)
+    item.uri.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -27,24 +27,37 @@ const RecordingScreen = () => {
       }
     };
     requestPermission();
-  }, []);
-
-  useEffect(() => {
-    const loadRecordings = async () => {
-      try {
-        const storedRecordings = await AsyncStorage.getItem("recordings");
-        if (storedRecordings) {
-          setRecordingsList(JSON.parse(storedRecordings));
-        }
-      } catch (error) {
-        console.error("Failed to load recordings", error);
-      }
-    };
     loadRecordings();
   }, []);
 
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
+  const loadRecordings = async () => {
+    try {
+      const storedRecordings = await AsyncStorage.getItem("recordings");
+      if (storedRecordings) {
+        const parsedRecordings = JSON.parse(storedRecordings).map((rec) => ({
+          ...rec,
+          date: new Date(rec.date),
+        }));
+        setRecordingsList(parsedRecordings);
+      }
+    } catch (error) {
+      console.error("Failed to load recordings", error);
+    }
+  };
+
   const saveRecording = async (uri) => {
-    const newRecordings = [...recordingsList, { uri, date: new Date() }];
+    const newRecordings = [
+      ...recordingsList,
+      { uri, date: new Date().toISOString() },
+    ];
     setRecordingsList(newRecordings);
     try {
       await AsyncStorage.setItem("recordings", JSON.stringify(newRecordings));
@@ -55,12 +68,16 @@ const RecordingScreen = () => {
 
   const startRecording = async () => {
     try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       setRecording(recording);
       setIsRecording(true);
-      console.log("Recording started...");
     } catch (err) {
       console.error("Failed to start recording", err);
     }
@@ -71,7 +88,7 @@ const RecordingScreen = () => {
       await recording.stopAndUnloadAsync();
       setIsRecording(false);
       const uri = recording.getURI();
-      console.log("Recording stopped. URI:", uri);
+      saveRecording(uri);
     } catch (err) {
       console.error("Failed to stop recording", err);
     }
@@ -89,29 +106,18 @@ const RecordingScreen = () => {
     const updatedRecordings = recordingsList.filter((item) => item.uri !== uri);
     setRecordingsList(updatedRecordings);
     try {
-      await AsyncStorage.setItem(
-        "recordings",
-        JSON.stringify(updatedRecordings)
-      );
+      await AsyncStorage.setItem("recordings", JSON.stringify(updatedRecordings));
     } catch (error) {
       console.error("Failed to delete recording", error);
     }
   };
 
   if (hasPermission === null) {
-    return (
-      <View>
-        <Text>Requesting permission...</Text>
-      </View>
-    );
+    return <Text>Requesting permission...</Text>;
   }
 
   if (hasPermission === false) {
-    return (
-      <View>
-        <Text>No permission to access the microphone</Text>
-      </View>
-    );
+    return <Text>No permission to access the microphone</Text>;
   }
 
   return (
@@ -123,35 +129,27 @@ const RecordingScreen = () => {
       ) : (
         <Button title="Start Recording" onPress={startRecording} />
       )}
-
-      <FlatList
-        data={recordingsList}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.recordingItem}>
-            <Text>{`Recording - ${item.date.toLocaleString()}`}</Text>
-            <Button title="Play" onPress={() => playRecording(item.uri)} />
-            <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
-          </View>
-        )}
-      />
       <TextInput
         style={styles.searchBar}
         placeholder="Search recordings..."
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
-      <FlatList
-        data={filteredRecordings}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.recordingItem}>
-            <Text>{`Recording - ${item.date.toLocaleString()}`}</Text>
-            <Button title="Play" onPress={() => playRecording(item.uri)} />
-            <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
-          </View>
-        )}
-      />
+      {recordingsList.length === 0 ? (
+        <Text>No recordings available. Start by creating one!</Text>
+      ) : (
+        <FlatList
+          data={filteredRecordings}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({ item }) => (
+            <View style={styles.recordingItem}>
+              <Text>{`Recording - ${new Date(item.date).toLocaleString()}`}</Text>
+              <Button title="Play" onPress={() => playRecording(item.uri)} />
+              <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
+            </View>
+          )}
+        />
+      )}
     </View>
   );
 };
@@ -159,9 +157,14 @@ const RecordingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     padding: 16,
+  },
+  searchBar: {
+    height: 40,
+    borderColor: "gray",
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 8,
   },
   recordingItem: {
     flexDirection: "row",
