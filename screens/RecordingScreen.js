@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Button, Alert, FlatList, StyleSheet, TextInput } from "react-native";
+import {
+  View,
+  Text,
+  Button,
+  Alert,
+  FlatList,
+  StyleSheet,
+  TextInput,
+} from "react-native";
 import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 
 const RecordingScreen = () => {
   const [hasPermission, setHasPermission] = useState(null);
@@ -10,9 +20,10 @@ const RecordingScreen = () => {
   const [sound, setSound] = useState();
   const [recordingsList, setRecordingsList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [recordingName, setRecordingName] = useState("");
 
   const filteredRecordings = recordingsList.filter((item) =>
-    item.uri.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -54,13 +65,19 @@ const RecordingScreen = () => {
   };
 
   const saveRecording = async (uri) => {
-    const newRecordings = [
-      ...recordingsList,
-      { uri, date: new Date().toISOString() },
-    ];
-    setRecordingsList(newRecordings);
+    const newRecording = {
+      uri,
+      name: recordingName || `Recording - ${new Date().toLocaleString()}`, // Use provided name or default
+      date: new Date().toISOString(),
+    };
+    const newRecordingsList = [...recordingsList, newRecording];
+    setRecordingsList(newRecordingsList);
+    setRecordingName(""); // Reset the recording name field
     try {
-      await AsyncStorage.setItem("recordings", JSON.stringify(newRecordings));
+      await AsyncStorage.setItem(
+        "recordings",
+        JSON.stringify(newRecordingsList)
+      );
     } catch (error) {
       console.error("Failed to save recording", error);
     }
@@ -106,12 +123,29 @@ const RecordingScreen = () => {
     const updatedRecordings = recordingsList.filter((item) => item.uri !== uri);
     setRecordingsList(updatedRecordings);
     try {
-      await AsyncStorage.setItem("recordings", JSON.stringify(updatedRecordings));
+      await AsyncStorage.setItem(
+        "recordings",
+        JSON.stringify(updatedRecordings)
+      );
     } catch (error) {
       console.error("Failed to delete recording", error);
     }
   };
 
+  const shareRecording = async (uri) => {
+    try {
+      const fileExists = await FileSystem.getInfoAsync(uri);
+      if (!fileExists.exists) {
+        Alert.alert("Error", "File does not exist");
+        return;
+      }
+
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      console.error("Failed to share recording", error);
+      Alert.alert("Error", "Unable to share the recording");
+    }
+  };
   if (hasPermission === null) {
     return <Text>Requesting permission...</Text>;
   }
@@ -124,6 +158,12 @@ const RecordingScreen = () => {
     <View style={styles.container}>
       <Text>Recording Screen</Text>
       <Text>Status: {isRecording ? "Recording..." : "Idle"}</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter recording name"
+        value={recordingName}
+        onChangeText={setRecordingName}
+      />
       {isRecording ? (
         <Button title="Stop Recording" onPress={stopRecording} />
       ) : (
@@ -139,13 +179,19 @@ const RecordingScreen = () => {
         <Text>No recordings available. Start by creating one!</Text>
       ) : (
         <FlatList
-          data={filteredRecordings}
+          data={recordingsList}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({ item }) => (
             <View style={styles.recordingItem}>
-              <Text>{`Recording - ${new Date(item.date).toLocaleString()}`}</Text>
+              <Text>{`Recording - ${new Date(
+                item.date
+              ).toLocaleString()}`}</Text>
               <Button title="Play" onPress={() => playRecording(item.uri)} />
-              <Button title="Delete" onPress={() => deleteRecording(item.uri)} />
+              <Button
+                title="Delete"
+                onPress={() => deleteRecording(item.uri)}
+              />
+              <Button title="Share" onPress={() => shareRecording(item.uri)} />
             </View>
           )}
         />
@@ -158,6 +204,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  input: {
+    height: 40,
+    borderColor: "gray",
+    borderWidth: 1,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    width: "100%",
   },
   searchBar: {
     height: 40,
