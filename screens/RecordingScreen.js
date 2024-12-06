@@ -2,16 +2,17 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  Button,
-  Alert,
   FlatList,
   StyleSheet,
   TextInput,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
 import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
+import Icon from "react-native-vector-icons/MaterialIcons";
 
 const RecordingScreen = () => {
   const [hasPermission, setHasPermission] = useState(null);
@@ -23,7 +24,7 @@ const RecordingScreen = () => {
   const [recordingName, setRecordingName] = useState("");
 
   const filteredRecordings = recordingsList.filter((item) =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -67,12 +68,12 @@ const RecordingScreen = () => {
   const saveRecording = async (uri) => {
     const newRecording = {
       uri,
-      name: recordingName || `Recording - ${new Date().toLocaleString()}`, // Use provided name or default
+      name: recordingName || `Recording - ${new Date().toLocaleString()}`,
       date: new Date().toISOString(),
     };
     const newRecordingsList = [...recordingsList, newRecording];
     setRecordingsList(newRecordingsList);
-    setRecordingName(""); // Reset the recording name field
+    setRecordingName("");
     try {
       await AsyncStorage.setItem(
         "recordings",
@@ -146,6 +147,7 @@ const RecordingScreen = () => {
       Alert.alert("Error", "Unable to share the recording");
     }
   };
+
   if (hasPermission === null) {
     return <Text>Requesting permission...</Text>;
   }
@@ -156,42 +158,54 @@ const RecordingScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Text>Recording Screen</Text>
-      <Text>Status: {isRecording ? "Recording..." : "Idle"}</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter recording name"
-        value={recordingName}
-        onChangeText={setRecordingName}
-      />
-      {isRecording ? (
-        <Button title="Stop Recording" onPress={stopRecording} />
-      ) : (
-        <Button title="Start Recording" onPress={startRecording} />
-      )}
+      <Text style={styles.header}>Audio Recorder</Text>
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter recording name"
+          value={recordingName}
+          onChangeText={setRecordingName}
+        />
+        <TouchableOpacity
+          onPress={isRecording ? stopRecording : startRecording}
+          style={[
+            styles.recordButton,
+            isRecording && styles.recordingActive,
+          ]}
+        >
+          <Icon name={isRecording ? "stop" : "mic"} size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
       <TextInput
         style={styles.searchBar}
         placeholder="Search recordings..."
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
-      {recordingsList.length === 0 ? (
-        <Text>No recordings available. Start by creating one!</Text>
+
+      {filteredRecordings.length === 0 ? (
+        <Text style={styles.noRecordingsText}>
+          No recordings available. Start by creating one!
+        </Text>
       ) : (
         <FlatList
-          data={recordingsList}
+          data={filteredRecordings}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({ item }) => (
             <View style={styles.recordingItem}>
-              <Text>{`Recording - ${new Date(
-                item.date
-              ).toLocaleString()}`}</Text>
-              <Button title="Play" onPress={() => playRecording(item.uri)} />
-              <Button
-                title="Delete"
-                onPress={() => deleteRecording(item.uri)}
-              />
-              <Button title="Share" onPress={() => shareRecording(item.uri)} />
+              <Text style={styles.recordingName}>{item.name}</Text>
+              <View style={styles.actionButtons}>
+                <TouchableOpacity onPress={() => playRecording(item.uri)}>
+                  <Icon name="play-arrow" size={24} color="#4CAF50" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => deleteRecording(item.uri)}>
+                  <Icon name="delete" size={24} color="#F44336" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => shareRecording(item.uri)}>
+                  <Icon name="share" size={24} color="#2196F3" />
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         />
@@ -204,27 +218,74 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    backgroundColor: "#f4f4f4",
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+    textAlign: "center",
+    color: "#333",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
   },
   input: {
+    flex: 1,
     height: 40,
-    borderColor: "gray",
+    borderColor: "#ccc",
     borderWidth: 1,
-    marginBottom: 8,
+    borderRadius: 8,
     paddingHorizontal: 8,
-    width: "100%",
+    marginRight: 8,
+    backgroundColor: "#fff",
+  },
+  recordButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FF5722",
+  },
+  recordingActive: {
+    backgroundColor: "#D32F2F",
   },
   searchBar: {
     height: 40,
-    borderColor: "gray",
+    borderColor: "#ccc",
     borderWidth: 1,
-    marginBottom: 10,
+    borderRadius: 8,
     paddingHorizontal: 8,
+    marginBottom: 16,
+    backgroundColor: "#fff",
+  },
+  noRecordingsText: {
+    textAlign: "center",
+    color: "#888",
   },
   recordingItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: 8,
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    elevation: 2,
+  },
+  recordingName: {
+    fontSize: 16,
+    color: "#333",
+    flex: 1,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: 90,
   },
 });
 
